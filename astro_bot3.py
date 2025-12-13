@@ -3,6 +3,7 @@
 🎯 Солнечная система + звезды для олимпиад
 """
 
+import os
 import logging
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler, MessageHandler, filters
@@ -14,7 +15,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-import os
 TOKEN = os.environ.get('BOT_TOKEN')
 
 # БАЗА ДАННЫХ НЕБЕСНЫХ ТЕЛ
@@ -973,6 +973,7 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
 
 
