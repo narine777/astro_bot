@@ -15,7 +15,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-TOKEN = os.environ.get('BOT_TOKEN')
+TOKEN = os.environ.get('8591960754:AAHYQB485PtcaaF7QUCTjrWEQVwmrbSig5A')
 if not TOKEN:
     print("❌ ОШИБКА: Переменная окружения BOT_TOKEN не установлена!")
     print("Добавьте её в Railway → Variables")
@@ -1003,6 +1003,7 @@ if __name__ == '__main__':
             print(f"❌ Ошибка: {e}")
             print("🔄 Перезапуск через 10 секунд...")
             time.sleep(10)
+
 
 
 
