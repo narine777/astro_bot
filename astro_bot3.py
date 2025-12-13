@@ -966,9 +966,44 @@ def main():
     except Exception as e:
         print(f"❌ Ошибка: {e}")
         print("=" * 60)
+# ==================== ЗАПУСК ДЛЯ RAILWAY ====================
 
 if __name__ == '__main__':
-    main()
+    import time
+    import os
+    
+    print("🚀 AstroBot запущен на Railway")
+    
+    # Бесконечный цикл
+    while True:
+        try:
+            print("=" * 60)
+            print("Запуск бота...")
+            
+            # Создаем приложение
+            TOKEN = os.environ.get('BOT_TOKEN')
+            application = Application.builder().token(TOKEN).build()
+            
+            # Регистрируем обработчики
+            application.add_handler(CommandHandler("start", start_command))
+            application.add_handler(CallbackQueryHandler(button_callback))
+            application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+            
+            print("✅ Обработчики зарегистрированы")
+            print("🔄 Начинаем polling...")
+            
+            # Запускаем polling
+            application.run_polling(
+                allowed_updates=Update.ALL_TYPES,
+                drop_pending_updates=True,
+                close_loop_on_sigint=False
+            )
+            
+        except Exception as e:
+            print(f"❌ Ошибка: {e}")
+            print("🔄 Перезапуск через 10 секунд...")
+            time.sleep(10)
+
 
 
 
