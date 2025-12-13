@@ -976,8 +976,21 @@ def main():
         print("=" * 60)
 
 
-if __name__ == '__main__':
-    main()
+ if __name__ == '__main__':
+    # Бесконечный цикл для Railway
+    while True:
+        try:
+            print("🚀 Запуск AstroBot...")
+            main()
+        except KeyboardInterrupt:
+            print("\n🛑 Остановка бота...")
+            break
+        except Exception as e:
+            print(f"❌ Ошибка: {e}")
+            print("🔄 Перезапуск через 5 секунд...")
+            import time
+            time.sleep(5)
+
 
 
 
