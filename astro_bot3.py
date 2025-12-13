@@ -975,12 +975,13 @@ def main():
         print(f"❌ Ошибка: {e}")
         print("=" * 60)
 
+# ==================== ЗАПУСК БОТА ====================
 
- if __name__ == '__main__':
-    # Бесконечный цикл для Railway
+if __name__ == '__main__':
+    # Для Railway - бесконечный запуск
+    import time
     while True:
         try:
-            print("🚀 Запуск AstroBot...")
             main()
         except KeyboardInterrupt:
             print("\n🛑 Остановка бота...")
@@ -988,8 +989,8 @@ def main():
         except Exception as e:
             print(f"❌ Ошибка: {e}")
             print("🔄 Перезапуск через 5 секунд...")
-            import time
             time.sleep(5)
+
 
 
 
