@@ -16,6 +16,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 TOKEN = os.environ.get('BOT_TOKEN')
+if not TOKEN:
+    print("❌ ОШИБКА: Переменная окружения BOT_TOKEN не установлена!")
+    print("Добавьте её в Railway → Variables")
+    exit(1)
 
 # БАЗА ДАННЫХ НЕБЕСНЫХ ТЕЛ
 CELESTIAL_BODIES = {
@@ -973,6 +977,7 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
 
 
