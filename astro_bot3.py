@@ -15,7 +15,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ЗАМЕНИТЕ НА ВАШ ТОКЕН ОТ @BotFather
-TOKEN = "BOT_TOKEN"
+TOKEN = "8591960754:AAFPtzn583odW5jD8SDy05v1ByGO2TyD85w"
 
 # БАЗА ДАННЫХ НЕБЕСНЫХ ТЕЛ
 CELESTIAL_BODIES = {
@@ -973,4 +973,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
