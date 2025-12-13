@@ -15,7 +15,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-TOKEN = os.environ.get('8591960754:AAHYQB485PtcaaF7QUCTjrWEQVwmrbSig5A')
+TOKEN = os.environ.get('TOKEN')
 if not TOKEN:
     print("❌ ОШИБКА: Переменная окружения BOT_TOKEN не установлена!")
     print("Добавьте её в Railway → Variables")
@@ -1018,6 +1018,7 @@ if __name__ == '__main__':
     
     # Запуск
     asyncio.run(main_async())
+
 
 
 
