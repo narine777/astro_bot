@@ -971,38 +971,54 @@ def main():
 if __name__ == '__main__':
     import time
     import os
+    import asyncio
     
-    print("🚀 AstroBot запущен на Railway")
+    async def main_async():
+        print("=" * 60)
+        print("🚀 AstroBot запущен на Railway")
+        print("=" * 60)
+        
+        # Получаем токен
+        TOKEN = os.environ.get('BOT_TOKEN')
+        if not TOKEN:
+            TOKEN = "8591960754:AAFPtzn583odW5jD8SDy05v1ByGO2TyD85w"
+        
+        print(f"✅ Токен: {TOKEN[:10]}...")
+        
+        # Создаем приложение
+        application = Application.builder().token(TOKEN).build()
+        
+        # Обработчик ошибок
+        async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            print(f"❌ Ошибка: {context.error}")
+        
+        # Регистрируем обработчики
+        application.add_handler(CommandHandler("start", start_command))
+        application.add_handler(CallbackQueryHandler(button_callback))
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+        application.add_error_handler(error_handler)
+        
+        print("✅ Обработчики зарегистрированы")
+        print("=" * 60)
+        
+        # Запускаем polling
+        await application.initialize()
+        await application.start()
+        print("🎯 Бот запущен и готов к работе!")
+        print("📱 Напишите /start в Telegram")
+        
+        # Бесконечный цикл polling
+        await application.updater.start_polling(
+            drop_pending_updates=True,
+            allowed_updates=Update.ALL_TYPES
+        )
+        
+        # Держим бота запущенным
+        await asyncio.Event().wait()
     
-    # Бесконечный цикл
-    while True:
-        try:
-            print("=" * 60)
-            print("Запуск бота...")
-            
-            # Создаем приложение
-            TOKEN = os.environ.get('BOT_TOKEN')
-            application = Application.builder().token(TOKEN).build()
-            
-            # Регистрируем обработчики
-            application.add_handler(CommandHandler("start", start_command))
-            application.add_handler(CallbackQueryHandler(button_callback))
-            application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-            
-            print("✅ Обработчики зарегистрированы")
-            print("🔄 Начинаем polling...")
-            
-            # Запускаем polling
-            application.run_polling(
-                allowed_updates=Update.ALL_TYPES,
-                drop_pending_updates=True,
-                close_loop_on_sigint=False
-            )
-            
-        except Exception as e:
-            print(f"❌ Ошибка: {e}")
-            print("🔄 Перезапуск через 10 секунд...")
-            time.sleep(10)
+    # Запуск
+    asyncio.run(main_async())
+
 
 
 
