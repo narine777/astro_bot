@@ -953,6 +953,7 @@ def main():
     try:
         # Создаем приложение
         application = Application.builder().token(TOKEN).build()
+        await application.updater.start_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
 
         # Регистрируем обработчики
         application.add_handler(CommandHandler("start", start_command))
@@ -977,6 +978,7 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
 
 
