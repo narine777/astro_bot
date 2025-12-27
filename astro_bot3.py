@@ -34,7 +34,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Токен бота из переменных окружения
-TOKEN = os.getenv("TOKEN", "")
+TOKEN = os.getenv("TOKEN", "8591960754:AAGBlsOx7h28a-UQvSH_0L4u81VMYTsLaFQ")
 
 if not TOKEN:
     print("❌ ОШИБКА: Токен бота не найден!")
@@ -1077,3 +1077,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
