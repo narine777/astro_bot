@@ -1,1 +1,1 @@
-worker: python -m astro_bot3
+worker: python astro_bot.py
