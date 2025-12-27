@@ -1,7 +1,7 @@
 """
 🚀 AstroBot: Полный справочник по астрономии с решениями задач
 🎯 Солнечная система + звезды для олимпиад
-Версия 2.0 - оптимизировано для Railway
+Версия 2.1 - исправлена ошибка запуска
 """
 
 import os
@@ -254,7 +254,7 @@ class CelestialDatabase:
                 "temperature": "9940 K",
                 "accuracy": "Высокая (параллакс Hipparcos)",
                 "sources": "Hipparcos, Hubble, Gaia",
-                "task": "Рассчитать абсолютную звездную величина",
+                "task": "Рассчитать абсолютную звездную величину",
                 "solution": "M = m - 5lg(d/10) = -1.46 - 5lg(2.64/10) ≈ +1.42"
             }
         }
@@ -987,8 +987,15 @@ def main():
         sys.exit(1)
 
     try:
-        # Создаем приложение
-        application = Application.builder().token(TOKEN).build()
+        # Создаем приложение с увеличенными таймаутами
+        application = (
+            Application.builder()
+            .token(TOKEN)
+            .read_timeout(30)
+            .write_timeout(30)
+            .connect_timeout(30)
+            .build()
+        )
 
         # Регистрация обработчиков
         application.add_handler(CommandHandler("start", start_command))
@@ -1001,11 +1008,18 @@ def main():
         # Определяем режим запуска
         railway_public_domain = os.getenv("RAILWAY_PUBLIC_DOMAIN", "")
         railway_environment = os.getenv("RAILWAY_ENVIRONMENT", "")
+        railway_static_url = os.getenv("RAILWAY_STATIC_URL", "")
 
-        if railway_public_domain and railway_environment:
+        # Используем любой доступный Railway URL
+        webhook_url = None
+        for url_var in [railway_public_domain, railway_static_url]:
+            if url_var and url_var.strip():
+                webhook_url = f"https://{url_var.strip()}/webhook"
+                break
+
+        if webhook_url and railway_environment:
             # Запуск на Railway с вебхуками
             PORT = int(os.getenv("PORT", 8000))
-            webhook_url = f"https://{railway_public_domain}/webhook"
 
             print(f"🌐 Запуск на Railway")
             print(f"🔗 Вебхук: {webhook_url}")
@@ -1032,12 +1046,15 @@ def main():
                 drop_pending_updates=True,
                 allowed_updates=Update.ALL_TYPES,
                 timeout=30,
-                pool_timeout=30
+                read_timeout=30,
+                write_timeout=30
             )
 
     except Exception as e:
         logger.error(f"❌ Ошибка запуска бота: {e}")
         print(f"❌ Ошибка: {e}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
 
 
