@@ -21,7 +21,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-TOKEN = "8591960754:AAGBlsOx7h28a-UQvSH_0L4u81VMYTsLaFQ"  # Замените на ваш токен
+TOKEN = os.getenv('BOT_TOKEN')# Замените на ваш токен
 
 
 class CelestialDatabase:
@@ -1300,3 +1300,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
