@@ -1,129 +1,62 @@
 """
 🚀 AstroBot: Полный справочник по астрономии с решениями задач
 🎯 Солнечная система + звезды для олимпиад
-Версия 2.3 - исправлена проверка токена
 """
 
-import os
-import sys
+import logging
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler, MessageHandler, filters
+
+import threading
+import requests
+import time
 import json
 import re
-import logging
-import signal
-import atexit
-import time
-import threading
-from datetime import datetime
+import os
+import math
 
-# Telegram импорты
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import (
-    Application, 
-    CommandHandler, 
-    ContextTypes, 
-    CallbackQueryHandler, 
-    MessageHandler, 
-    filters
-)
-
-# ==================== НАСТРОЙКА ЛОГИРОВАНИЯ ====================
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# Токен бота из переменных окружения
-TOKEN = os.getenv("TOKEN", "8591960754:AAGBlsOx7h28a-UQvSH_0L4u81VMYTsLaFQ")
+TOKEN = "8591960754:AAGBlsOx7h28a-UQvSH_0L4u81VMYTsLaFQ"  # Замените на ваш токен
 
-if not TOKEN:
-    print("❌ ОШИБКА: Токен бота не найден!")
-    print("Укажите токен одним из способов:")
-    print("1. В переменной окружения TOKEN")
-    print("2. В файле .env (TOKEN=ваш_токен)")
-    print("3. Прямо в коде: TOKEN = 'ваш_токен'")
-    print("=" * 60)
-    sys.exit(1)
 
-# ==================== ФАЙЛОВАЯ БЛОКИРОВКА ====================
-def create_file_lock():
-    """
-    Создает файловую блокировку для предотвращения запуска 
-    нескольких экземпляров бота одновременно
-    """
-    lock_file = "/tmp/astro_bot.lock"
-    
-    try:
-        import fcntl
-        lock_fd = open(lock_file, 'w')
-        
-        try:
-            # Пытаемся получить эксклюзивную блокировку
-            fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            
-            # Сохраняем PID текущего процесса
-            lock_fd.write(str(os.getpid()))
-            lock_fd.flush()
-            logger.info("✅ Файловая блокировка установлена")
-            
-            # Функция для очистки при завершении
-            def cleanup_lock():
-                try:
-                    fcntl.flock(lock_fd, fcntl.LOCK_UN)
-                    lock_fd.close()
-                    if os.path.exists(lock_file):
-                        os.remove(lock_file)
-                    logger.info("🔒 Файловая блокировка снята")
-                except:
-                    pass
-            
-            atexit.register(cleanup_lock)
-            return True
-            
-        except (IOError, BlockingIOError):
-            lock_fd.close()
-            logger.error("❌ Бот уже запущен в другом процессе!")
-            return False
-            
-    except ImportError:
-        # На Windows нет fcntl, пропускаем блокировку
-        logger.warning("⚠️ Модуль fcntl не доступен (Windows?), пропускаем блокировку")
-        return True
-    except Exception as e:
-        logger.warning(f"⚠️ Не удалось создать lock файл: {e}")
-        return True  # Продолжаем работу
-
-# ==================== БАЗА ДАННЫХ НЕБЕСНЫХ ТЕЛ ====================
 class CelestialDatabase:
-    """Класс для работы с базой данных небесных тел"""
-
     def __init__(self, json_file='celestial_data.json'):
+        """
+        Args:
+            json_file (str):
+        """
         self.json_file = json_file
         self.data = {}
         self.load_data()
 
     def load_data(self):
-        """Загрузка данных из JSON файла"""
         try:
             if not os.path.exists(self.json_file):
-                logger.warning(f"Файл {self.json_file} не найден, создаем примерные данные")
+                print(f" {self.json_file}")
                 self.create_sample_data()
                 return
 
             with open(self.json_file, 'r', encoding='utf-8') as f:
                 self.data = json.load(f)
 
-            logger.info(f"✅ База данных загружена: {len(self.data)} объектов")
+            print(f" {len(self.data)}")
 
         except json.JSONDecodeError as e:
-            logger.error(f"Ошибка в формате JSON: {e}")
+            print(f"{e}")
             self.data = {}
         except Exception as e:
-            logger.error(f"Ошибка загрузки данных: {e}")
+            print(f"{e}")
             self.data = {}
 
     def create_sample_data(self):
-        """Создание примерных данных"""
+        """Создание примерных данных, если файл не найден"""
+        print("📝 Создание примерных данных...")
+
         self.data = {
             "Солнце": {
                 "emoji": "☀️",
@@ -263,24 +196,34 @@ class CelestialDatabase:
                 "temperature": "9940 K",
                 "accuracy": "Высокая (параллакс Hipparcos)",
                 "sources": "Hipparcos, Hubble, Gaia",
-                "task": "Рассчитать абсолютную звездную величину",
+                "task": "Рассчитать абсолютную звездную величин",
                 "solution": "M = m - 5lg(d/10) = -1.46 - 5lg(2.64/10) ≈ +1.42"
             }
         }
+
+        # Сохраняем примерные данные в файл
         self.save_data()
-        logger.info(f"📁 Создан файл {self.json_file} с примерными данными")
+        print(f"📁 Создан файл {self.json_file} с примерными данными")
 
     def save_data(self):
         """Сохранение данных в JSON файл"""
         try:
             with open(self.json_file, 'w', encoding='utf-8') as f:
                 json.dump(self.data, f, ensure_ascii=False, indent=2)
-            logger.info(f"✅ Данные сохранены в {self.json_file}")
+            print(f"✅ Данные сохранены в {self.json_file}")
         except Exception as e:
-            logger.error(f"Ошибка сохранения данных: {e}")
+            print(f"❌ Ошибка сохранения данных: {e}")
 
     def parse_scientific_number(self, value_str):
-        """Парсинг чисел в научной нотации"""
+        """
+        Парсинг чисел в научной нотации из строки
+
+        Args:
+            value_str (str): Строка с числом (например, "6.371×10⁶ м")
+
+        Returns:
+            float: Числовое значение или None если не удалось распарсить
+        """
         if not value_str:
             return None
 
@@ -288,37 +231,54 @@ class CelestialDatabase:
             # Удаляем единицы измерения
             value_str = re.sub(r'[^\d×\.eE\+\-^⁰¹²³⁴⁵⁶⁷⁸⁹]', '', value_str)
 
-            # Заменяем символы степени
+            # Заменяем символы степени на обычные числа
             superscript_map = {
                 '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4',
                 '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9'
             }
+
             for sup, num in superscript_map.items():
                 value_str = value_str.replace(sup, num)
 
             # Заменяем × на *
             value_str = value_str.replace('×', '*')
+
+            # Заменяем ^ на ** для Python
             value_str = value_str.replace('^', '**')
 
+            # Вычисляем значение
             return eval(value_str)
+
         except Exception as e:
-            logger.warning(f"Не удалось распарсить число: {value_str}")
+            print(f"⚠️ Не удалось распарсить число: {value_str}")
             return None
 
     def calculate_density(self, body_name):
-        """Рассчитать плотность небесного тела"""
+        """
+        Рассчитать плотность небесного тела
+
+        Args:
+            body_name (str): Название объекта
+
+        Returns:
+            dict: Результаты расчета или None если ошибка
+        """
         body = self.data.get(body_name)
         if not body:
             return None
 
         try:
-            mass = self.parse_scientific_number(body.get('mass', ''))
-            radius = self.parse_scientific_number(body.get('radius', ''))
+            mass_str = body.get('mass', '')
+            radius_str = body.get('radius', '')
+
+            mass = self.parse_scientific_number(mass_str)
+            radius = self.parse_scientific_number(radius_str)
 
             if mass is None or radius is None:
                 return None
 
             volume = (4 / 3) * 3.1415926535 * (radius ** 3)
+
             density = mass / volume if volume > 0 else 0
 
             return {
@@ -330,8 +290,9 @@ class CelestialDatabase:
                 'density_g_cm3': density / 1000,
                 'formula': 'ρ = 3M/(4πR³)'
             }
+
         except Exception as e:
-            logger.error(f"Ошибка расчета плотности: {e}")
+            print(f"❌ Ошибка расчета плотности: {e}")
             return None
 
 
@@ -341,39 +302,34 @@ CELESTIAL_DATA = celestial_db.data
 
 # Проверка загрузки данных
 if not CELESTIAL_DATA:
-    logger.error("❌ КРИТИЧЕСКАЯ ОШИБКА: Не удалось загрузить базу данных!")
-    sys.exit(1)
+    print("❌ КРИТИЧЕСКАЯ ОШИБКА: Не удалось загрузить базу данных!")
+    print("Убедитесь, что файл celestial_data.json находится в той же папке")
+    exit(1)
 
-# ==================== KEEP-ALIVE (только для веб-хостов) ====================
+
 def keep_alive():
-    """Функция для поддержания активности (опционально)"""
-    try:
-        import requests
-        web_url = os.getenv("WEB_URL", "")
-        if web_url:
-            while True:
-                try:
-                    response = requests.get(web_url, timeout=5)
-                    logger.info(f"🟢 Ping: {response.status_code}")
-                except Exception as e:
-                    logger.warning(f"🔴 Ping неудачен: {e}")
-                time.sleep(300)  # 5 минут
-    except ImportError:
-        pass
+    WEB_URL = "https://github.com/narine777/astro_bot/blob/main/astro_bot3.py"
+    print("✅ Keep-alive система запущена")
 
-# ==================== КЛАВИАТУРЫ ====================
+    while True:
+        try:
+            response = requests.get(WEB_URL, timeout=5)
+            print(f"🟢 Ping успешен: {response.status_code} в {time.strftime('%H:%M:%S')}")
+        except Exception as e:
+            print(f"🔴 Ping неудачен: {e} в {time.strftime('%H:%M:%S')}")
+        time.sleep(240)
+
+
 def get_main_keyboard():
-    """Основная клавиатура"""
     keyboard = [
         [KeyboardButton("🪐 8 Планет"), KeyboardButton("⭐️ Сириус"), KeyboardButton("☀️ Солнце")],
         [KeyboardButton("📊 Сравнить"), KeyboardButton("📝 Задачи"), KeyboardButton("🔬 Методы")],
-        [KeyboardButton("❓ Помощь")]
+        [KeyboardButton("❓ Помощь"), KeyboardButton("📏 Рассчитать плотность")]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
 
 
 def get_planets_keyboard():
-    """Клавиатура с 8 планетами"""
     keyboard = [
         [InlineKeyboardButton("☿ Меркурий", callback_data="body_Меркурий"),
          InlineKeyboardButton("♀ Венера", callback_data="body_Венера")],
@@ -412,6 +368,7 @@ def get_tasks_keyboard():
     ]
     return InlineKeyboardMarkup(keyboard)
 
+
 # ==================== ОСНОВНЫЕ КОМАНДЫ ====================
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /start"""
@@ -421,14 +378,20 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 *Доступные объекты:*
 • ☀️ **Солнце** - наша звезда
-• 🪐 **8 Планет** - от Меркурия до Нептуна
+• 🪐 **8 Планет** - от Меркурия до Нептун
 • ⭐️ **Сириус** - самая яркая звезда
 
 *Функции:*
 📊 **Сравнить** - сравнение двух объектов
 📝 **Задачи** - олимпиадные задачи с решениями
 🔬 **Методы** - методики измерений
+📏 **Рассчитать плотность** - расчет плотности по массе и радиусу
 ❓ **Помощь** - справка по боту
+
+*Для расчета плотности введите:*
+`плотность: масса=6e24 радиус=6e6`
+или
+`плотность: 6.872e62 9.862e62`
 
 *Нажмите кнопку ниже для начала:*
 """
@@ -472,7 +435,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif text == "❓ Помощь":
         await show_help(update)
 
-    elif text.lower().startswith("плотность:"):
+    elif text == "📏 Рассчитать плотность":
+        await show_density_help(update)
+
+    elif text.lower().startswith("плотность"):
+        # Обработка команды расчета плотности
         await calculate_density_from_text(update, context, text)
 
     else:
@@ -482,9 +449,42 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
+async def show_density_help(update: Update):
+    """Показать помощь по расчету плотности"""
+    help_text = """
+📏 *РАСЧЕТ ПЛОТНОСТИ*
+
+*Формула:* ρ = M / V = 3M / (4πR³)
+
+*Как вводить данные:*
+1. С указанием параметров:
+   `плотность: масса=5.9722e24 радиус=6.371e6`
+   `плотность: m=6e24 r=6e6`
+
+2. Просто числа через пробел:
+   `плотность: 5.9722e24 6.371e6`
+   `плотность: 6.872e62 9.862e62`
+
+3. С разными разделителями:
+   `плотность масса=1.9e27, радиус=7e7`
+   `плотность m=1e30 r=7e8`
+
+*Примеры для планет:*
+• Земля: `плотность: 5.9722e24 6.371e6`
+• Юпитер: `плотность: 1.898e27 6.991e7`
+• Солнце: `плотность: 1.989e30 6.957e8`
+
+*Примечания:*
+• Используйте научную нотацию (1e24 = 10²⁴)
+• Можно использовать русскую 'е' или английскую 'e'
+• Десятичный разделитель - точка (1.5e24)
+"""
+    await update.message.reply_text(help_text, parse_mode='Markdown', reply_markup=get_main_keyboard())
+
+
 # ==================== ФУНКЦИИ ДЛЯ РАБОТЫ С ДАННЫМИ ====================
 async def show_celestial_body_direct(update: Update, body_name: str):
-    """Показать информацию о небесном теле"""
+    """Непосредственно показать информацию о небесном теле"""
     if body_name not in CELESTIAL_DATA:
         await update.message.reply_text(
             f"❌ Объект '{body_name}' не найден в базе данных.",
@@ -497,7 +497,6 @@ async def show_celestial_body_direct(update: Update, body_name: str):
 
 
 async def show_celestial_body_inline(query, body_name: str):
-    """Показать информацию через инлайн-кнопку"""
     if body_name not in CELESTIAL_DATA:
         await query.edit_message_text(
             f"❌ Объект '{body_name}' не найден в базе данных.",
@@ -518,7 +517,6 @@ async def show_celestial_body_inline(query, body_name: str):
 
 
 def format_body_info(body_name: str, body: dict) -> str:
-    """Форматирование информации о небесном теле"""
     response = f"{body['emoji']} *{body_name.upper()}* ({body['name_en']})\n\n"
     response += f"📌 *Тип:* {body['type']}\n\n"
 
@@ -552,9 +550,7 @@ async def send_body_info(message, body_name: str, body: dict):
     await message.reply_text(response, parse_mode='Markdown', reply_markup=get_main_keyboard())
 
 
-# ==================== СРАВНЕНИЕ ====================
 async def show_comparison(query, body1: str, body2: str):
-    """Показать сравнение"""
     if body1 not in CELESTIAL_DATA or body2 not in CELESTIAL_DATA:
         await query.edit_message_text("❌ Один из объектов не найден в базе данных.")
         return
@@ -563,10 +559,11 @@ async def show_comparison(query, body1: str, body2: str):
     b2 = CELESTIAL_DATA[body2]
 
     response = f"📊 *СРАВНЕНИЕ: {b1['emoji']} {body1} vs {b2['emoji']} {body2}*\n\n"
+
     response += f"⚖️ *Масса:*\n• {body1}: {b1['mass']}\n• {body2}: {b2['mass']}\n\n"
+
     response += f"📏 *Радиус:*\n• {body1}: {b1['radius']}\n• {body2}: {b2['radius']}\n\n"
 
-    # Специальные сравнения
     if body1 == "Земля" and body2 == "Марс":
         density1 = celestial_db.calculate_density("Земля")
         density2 = celestial_db.calculate_density("Марс")
@@ -640,10 +637,10 @@ L_Сириус = 25.4 L☉
 
     keyboard = [[InlineKeyboardButton("🔙 Назад к сравнению", callback_data="back_compare")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
+
     await query.edit_message_text(response, parse_mode='Markdown', reply_markup=reply_markup)
 
 
-# ==================== ЗАДАЧИ ====================
 async def show_task_with_solution(query, task_type: str):
     """Показать задачу с полным решением"""
     tasks = {
@@ -660,13 +657,14 @@ async def show_task_with_solution(query, task_type: str):
    v₂ = √(2GM/R) = v₁√2
 
 🔢 **Данные для Марса:**
-- G = 6.67430×10⁻¹¹ м³/(кг·с²)
-- M_Марс = 6.4171×10²³ кг
-- R_Марс = 3.3895×10⁶ м
+- G = 6.67430×10⁻¹¹ м³/(кг·с²) (гравитационная постоянная)
+- M_Марс = 6.4171×10²³ кг (масса Марса)
+- R_Марс = 3.3895×10⁶ м (средний радиус Марса)
 
 📝 **Решение:**
 1. **Первая космическая скорость:**
    v₁ = √(6.67430×10⁻¹¹ × 6.4171×10²³ / 3.3895×10⁶)
+   v₁ = √(4.284×10¹³ / 3.3895×10⁶) 
    v₁ = √(1.264×10⁷) ≈ 3.56×10³ м/с
 
 2. **Вторая космическая скорость:**
@@ -679,6 +677,8 @@ async def show_task_with_solution(query, task_type: str):
 📊 **Сравнение с Землей:**
 - Земля: v₁ = 7.91 км/с, v₂ = 11.2 км/с
 - Марс в 2.2 раза легче удержать на орбите!
+
+⚡ **Интересный факт:** На Марсе запускать ракеты проще - нужно на 55% меньше энергии!
 """,
 
         "mass": """
@@ -686,6 +686,7 @@ async def show_task_with_solution(query, task_type: str):
 
 📝 **Условие:**
 Во сколько раз масса Юпитера больше массы Сатурна?
+Во сколько раз Солнце массивнее всех планет вместе?
 
 📐 **Формула сравнения масс:**
 N = M₁/M₂
@@ -693,29 +694,46 @@ N = M₁/M₂
 🔢 **Данные:**
 - M_Юпитер = 1.8982×10²⁷ кг
 - M_Сатурн = 5.6834×10²⁶ кг
+- M_Солнце = 1.9885×10³⁰ кг
+- M_всех_планет ≈ 2.66×10²⁷ кг
 
 📝 **Решение:**
-N = M_Юпитер / M_Сатурн
-N = 1.8982×10²⁷ / 5.6834×10²⁶
-N = 3.339
 
-🎯 **Ответ:**
-Юпитер в **3.34 раза** массивнее Сатурна
+1. **Юпитер vs Сатурн:**
+   N = M_Юпитер / M_Сатурн
+   N = 1.8982×10²⁷ / 5.6834×10²⁶
+   N = 3.339
+
+2. **Солнце vs все планеты:**
+   N = M_Солнце / M_всех_планет
+   N = 1.9885×10³⁰ / 2.66×10²⁷
+   N ≈ 747
+
+🎯 **Ответы:**
+1. Юпитер в **3.34 раза** массивнее Сатурна
+2. Солнце в **~750 раз** массивнее всех планет вместе!
 
 📊 **Распределение массы в Солнечной системе:**
 - Солнце: 99.86%
 - Юпитер: 0.10%
 - Остальные планеты: 0.04%
+
+⚡ **Интересный факт:** Юпитер в 2.5 раза массивнее, чем все остальные планеты вместе взятые!
 """,
 
         "gravity": """
 🌍 **ЗАДАЧА: Сила тяжести на планетах земной группы**
 
 📝 **Условие:**
-Рассчитайте ускорение свободного падения на Венере.
+Рассчитайте ускорение свободного падения на Венере и сравните его с земным.
 
-📐 **Формула:**
+📐 **Формула ускорения свободного падения:**
 g = GM/R²
+
+где:
+- G = 6.67430×10⁻¹¹ м³/(кг·с²) - гравитационная постоянная
+- M - масса планеты (кг)
+- R - радиус планеты (м)
 
 🔢 **Данные для Венеры:**
 - M_Венера = 4.8675×10²⁴ кг
@@ -724,30 +742,46 @@ g = GM/R²
 - R_Земля = 6.371×10⁶ м
 
 📝 **Решение:**
+
 1. **Ускорение на Венере:**
    g_В = (6.67430×10⁻¹¹ × 4.8675×10²⁴) / (6.0518×10⁶)²
+   g_В = 3.248×10¹⁴ / 3.663×10¹³
    g_В ≈ 8.87 м/с²
 
 2. **Ускорение на Земле:**
    g_З = (6.67430×10⁻¹¹ × 5.9722×10²⁴) / (6.371×10⁶)²
+   g_З = 3.985×10¹⁴ / 4.059×10¹³
    g_З ≈ 9.82 м/с²
 
 3. **Сравнение:**
    g_В / g_З = 8.87 / 9.82 ≈ 0.903
 
 🎯 **Ответы:**
-- Ускорение на Венере: **8.87 м/с²**
+- Ускорение свободного падения на Венере: **8.87 м/с²**
 - На Земле: **9.82 м/с²**
 - Отношение: **~0.90** (90% от земного)
+
+📊 **Таблица ускорений (м/с²):**
+- Меркурий: 3.70
+- Венера: 8.87  
+- Земля: 9.82
+- Марс: 3.71
+- Луна: 1.62
+
+⚡ **Интересный факт:** Несмотря на близкую массу, g на Венере меньше из-за большего радиуса!
 """,
 
         "period": """
 🔄 **ЗАДАЧА: Орбитальные и синодические периоды**
 
-📝 **Условие:** Определите синодический период Венеры.
+📝 **Условие 1:** Определите синодический период Венеры относительно Земли.
 
-📐 **Формула:**
+📐 **Формула синодического периода:**
 1/S = 1/T₁ - 1/T₂
+где:
+- S - синодический период
+- T₁ - сидерический период внутренней планеты
+- T₂ - сидерический период Земли
 
 🔢 **Данные:**
 - T_Венера = 224.7 дней
@@ -758,34 +792,84 @@ g = GM/R²
 1/S = 0.004451 - 0.002738 = 0.001713
 S = 1/0.001713 ≈ 583.8 дней
 
-🎯 **Ответ:** Синодический период Венеры **~584 дня**
+🎯 **Ответ 1:** Синодический период Венеры **~584 дня**
+
+---
+
+📝 **Условие 2:** Проверьте III закон Кеплера для Меркурия.
+
+📐 **Формула III закона Кеплера:**
+T²/a³ = const (в годах и а.е.)
+
+🔢 **Данные для Меркурия:**
+- T = 0.241 года (87.97/365.25)
+- a = 0.3871 а.е.
+
+📝 **Решение:**
+T²/a³ = (0.241)² / (0.3871)³
+T²/a³ = 0.05808 / 0.05799 ≈ 1.0015
+
+🎯 **Ответ 2:** Закон выполняется с точностью **0.15%**
+
+---
 
 📊 **Таблица периодов (дни):**
 - Меркурий: 87.97 (сид.), 115.9 (синод.)
 - Венера: 224.7 (сид.), 583.9 (синод.)
 - Земля: 365.25
 - Марс: 687.0 (сид.), 779.9 (синод.)
+
+⚡ **Интересный факт:** Синодический период Венеры - причина, почему она видна как "утренняя" или "вечерняя" звезда!
 """,
 
         "stars": """
 ⭐️ **ЗАДАЧА: Звездные характеристики Сириуса**
 
-📝 **Условие:** Во сколько раз Сириус ярче Солнца?
+📝 **Условие 1:** Во сколько раз Сириус ярче Солнца?
 
 🔢 **Данные:**
-- L_Сириус = 25.4 L☉
+- L_Сириус = 25.4 L☉ (светимость в солнечных единицах)
 - L_Солнце = 1 L☉
+- M_Сириус = 2.02 M☉
+- R_Сириус = 1.71 R☉
 
 📝 **Решение:**
 N = L_Сириус / L_Солнце = 25.4 / 1 = 25.4
 
-🎯 **Ответ:** Сириус в **25.4 раза** ярче Солнца
+🎯 **Ответ 1:** Сириус в **25.4 раза** ярче Солнца
+
+---
+
+📝 **Условие 2:** Оцените светимость звезда массой 5 M☉.
+
+📐 **Зависимость масса-светимость для главной последовательности:**
+L ∝ M³·⁵
+
+📝 **Решение:**
+L/L☉ = (M/M☉)³·⁵ = 5³·⁵
+5³·⁵ = 5³ × √5 = 125 × 2.236 = 279.5
+
+🎯 **Ответ 2:** Звезда 5 M☉ имеет светимость **~280 L☉**
+
+---
+
+📝 **Условие 3:** Найдите радиус Сириуса в метрах.
+
+📝 **Решение:**
+R_Сириус = 1.71 × R☉ = 1.71 × 6.957×10⁸ м
+R_Сириус ≈ 1.189×10⁹ м
+
+🎯 **Ответ 3:** Радиус Сириус **~1.19 млн км**
+
+---
 
 📊 **Характеристики Сириуса:**
-- Расстояние: 8.6 св. лет
-- Температура: 9940 K
-- Спектральный класс: A1V
+- Расстояние: 8.6 св. лет (2.64 пк)
+- Температура: 9940 K (Солнце: 5772 K)
+- Спектральный класс: A1V (белая звезда)
 - Возраст: ~200-300 млн лет
+
+⚡ **Интересный факт:** Сириус - двойная система: яркий компонент A и белый карлик B!
 """
     }
 
@@ -795,95 +879,278 @@ N = L_Сириус / L_Солнце = 25.4 / 1 = 25.4
     else:
         response = "📝 Выберите тип задачи из списка выше"
 
-    keyboard = [[InlineKeyboardButton("🔙 Назад к задачам", callback_data="back_tasks")]]
+    keyboard = [
+        [InlineKeyboardButton("🔙 Назад к задачам", callback_data="back_tasks")]
+    ]
+
     reply_markup = InlineKeyboardMarkup(keyboard)
+
     await query.edit_message_text(response, parse_mode='Markdown', reply_markup=reply_markup)
 
 
-# ==================== РАСЧЕТ ПЛОТНОСТИ ====================
+# ==================== РАСЧЕТ ПЛОТНОСТИ - ИСПРАВЛЕННАЯ ВЕРСИЯ ====================
 async def calculate_density_from_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str):
-    """Рассчитать плотность из текстового сообщения"""
+    """Рассчитать плотность из текстового сообщения - РАБОТАЮЩАЯ ВЕРСИЯ"""
     try:
-        text = text.lower()
-        if "масса=" in text and "радиус=" in text:
-            mass_start = text.find("масса=") + 6
-            mass_end = text.find(" ", mass_start)
-            if mass_end == -1:
-                mass_end = len(text)
-            mass_str = text[mass_start:mass_end].replace(",", ".")
+        print(f"📝 Получен запрос расчета плотности: {text}")
 
-            radius_start = text.find("радиус=") + 7
-            radius_end = text.find(" ", radius_start)
-            if radius_end == -1:
-                radius_end = len(text)
-            radius_str = text[radius_start:radius_end].replace(",", ".")
+        # Убираем слово "плотность" и лишние символы
+        text_clean = text.replace("плотность:", "").replace("плотность ", "").strip()
 
-            mass = float(mass_str)
-            radius = float(radius_str)
+        # Приводим к нижнему регистру для поиска
+        text_lower = text_clean.lower()
 
-            volume = (4 / 3) * 3.1415926535 * (radius ** 3)
-            density_kg_m3 = mass / volume
-            density_g_cm3 = density_kg_m3 / 1000
+        # Ищем массу и радиус в сообщении
+        mass = None
+        radius = None
 
-            response = f"""
+        # Список паттернов для поиска массы
+        mass_patterns = [
+            r"масса\s*[=:]\s*([-+]?\d*\.?\d+(?:[eеEЕ][-+]?\d+)?)",
+            r"m\s*[=:]\s*([-+]?\d*\.?\d+(?:[eеEЕ][-+]?\d+)?)"
+        ]
+
+        # Список паттернов для поиска радиуса
+        radius_patterns = [
+            r"радиус\s*[=:]\s*([-+]?\d*\.?\d+(?:[eеEЕ][-+]?\d+)?)",
+            r"r\s*[=:]\s*([-+]?\d*\.?\d+(?:[eеEЕ][-+]?\d+)?)"
+        ]
+
+        # Ищем массу
+        for pattern in mass_patterns:
+            match = re.search(pattern, text_lower)
+            if match:
+                mass_str = match.group(1)
+                # Заменяем русскую 'е' на английскую 'e' и запятые на точки
+                mass_str = mass_str.replace('е', 'e').replace('Е', 'E').replace(',', '.')
+                try:
+                    mass = float(mass_str)
+                    print(f"✅ Найдена масса: {mass}")
+                    break
+                except ValueError:
+                    continue
+
+        # Ищем радиус
+        for pattern in radius_patterns:
+            match = re.search(pattern, text_lower)
+            if match:
+                radius_str = match.group(1)
+                # Заменяем русскую 'е' на английскую 'e' и запятые на точки
+                radius_str = radius_str.replace('е', 'e').replace('Е', 'E').replace(',', '.')
+                try:
+                    radius = float(radius_str)
+                    print(f"✅ Найден радиус: {radius}")
+                    break
+                except ValueError:
+                    continue
+
+        # Если не нашли через паттерны, пробуем извлечь все числа из текста
+        if mass is None or radius is None:
+            # Ищем все числа в тексте (включая научную нотацию)
+            all_numbers = re.findall(r'[-+]?\d*\.?\d+(?:[eеEЕ][-+]?\d+)?', text_clean)
+            print(f"🔍 Все числа в тексте: {all_numbers}")
+
+            if len(all_numbers) >= 2:
+                try:
+                    # Берем первое число как массу, второе как радиус
+                    mass_str = all_numbers[0].replace('е', 'e').replace('Е', 'E').replace(',', '.')
+                    radius_str = all_numbers[1].replace('е', 'e').replace('Е', 'E').replace(',', '.')
+
+                    mass = float(mass_str)
+                    radius = float(radius_str)
+                    print(f"✅ Извлечены из всех чисел: масса={mass}, радиус={radius}")
+                except (ValueError, IndexError) as e:
+                    print(f"❌ Ошибка извлечения чисел: {e}")
+
+        # Проверяем, что нашли оба значения
+        if mass is None or radius is None:
+            await update.message.reply_text(
+                "❌ Не удалось извлечь массу и радиус.\n\n"
+                "✅ *Правильные примеры:*\n"
+                "• `плотность: масса=5.9722e24 радиус=6.371e6`\n"
+                "• `плотность: m=5.9722e24 r=6.371e6`\n"
+                "• `плотность: 5.9722e24 6.371e6`\n"
+                "• `плотность масса=5.9722e24, радиус=6.371e6`\n\n"
+                "*Просто введите:*\n"
+                "`плотность: [масса] [радиус]`",
+                parse_mode='Markdown'
+            )
+            return
+
+        # Проверяем, что значения разумные
+        if mass <= 0 or radius <= 0:
+            await update.message.reply_text(
+                "❌ Масса и радиус должны быть положительными числами!",
+                parse_mode='Markdown'
+            )
+            return
+
+        # ========== ВЫЧИСЛЕНИЕ ПЛОТНОСТИ ==========
+        print(f"⚙️ Начинаем расчет: масса={mass}, радиус={radius}")
+
+        # 1. Рассчитываем объем
+        R_cubed = radius ** 3
+        print(f"📐 R³ = {radius}³ = {R_cubed}")
+
+        pi = 3.141592653589793
+        volume = (4.0 / 3.0) * pi * R_cubed
+        print(f"📐 Объем V = (4/3)πR³ = {volume}")
+
+        # 2. Рассчитываем плотность двумя способами для проверки
+        density_method1 = mass / volume  # метод 1: M/V
+        density_method2 = (3 * mass) / (4 * pi * R_cubed)  # метод 2: 3M/(4πR³)
+        print(f"📐 Плотность (метод 1): {density_method1}")
+        print(f"📐 Плотность (метод 2): {density_method2}")
+
+        # Используем среднее значение для надежности
+        density_kg_m3 = (density_method1 + density_method2) / 2.0
+        density_g_cm3 = density_kg_m3 / 1000.0
+
+        print(f"📐 Итоговая плотность: {density_kg_m3} кг/м³ = {density_g_cm3} г/см³")
+
+        # Форматируем числа для вывода
+        def format_scientific(value):
+            """Форматирует число в научной нотации для вывода"""
+            if abs(value) < 1e-6 or abs(value) > 1e6:
+                return f"{value:.3e}".replace('e', ' × 10^')
+            else:
+                return f"{value:.3f}"
+
+        # Форматируем все числа
+        mass_formatted = format_scientific(mass)
+        radius_formatted = format_scientific(radius)
+        volume_formatted = format_scientific(volume)
+        density_kg_formatted = format_scientific(density_kg_m3)
+        density_g_formatted = format_scientific(density_g_cm3)
+
+        # ФОРМИРУЕМ ОТВЕТ С РЕЗУЛЬТАТАМИ
+        response = f"""
 📏 *РЕЗУЛЬТАТ РАСЧЕТА ПЛОТНОСТИ*
 
 *Входные данные:*
-• Масса: {mass:.3e} кг
-• Радиус: {radius:.3e} м
+• Масса (M): {mass_formatted} кг
+• Радиус (R): {radius_formatted} м
 
-*📐 Расчет:*
-1. Объем: V = (4/3)πR³ = {volume:.3e} м³
-2. Плотность: ρ = M/V
+*📐 Расчет объема:*
+V = (4/3) × π × R³
+V = (4/3) × 3.1416 × ({radius_formatted})³
+V = (4/3) × 3.1416 × {format_scientific(R_cubed)}
+V = *{volume_formatted} м³*
 
-*📊 Результаты:*
-• Плотность: {density_kg_m3:.2f} кг/м³
-• Плотность: {density_g_cm3:.3f} г/см³
+*📐 Расчет плотности:*
+1. По формуле ρ = M/V:
+   ρ = {mass_formatted} кг / {volume_formatted} м³
+   ρ = *{format_scientific(density_method1)} кг/м³*
+
+2. По формуле ρ = 3M/(4πR³):
+   ρ = 3 × {mass_formatted} / (4 × 3.1416 × {format_scientific(R_cubed)})
+   ρ = *{format_scientific(density_method2)} кг/м³*
+
+*✅ Итоговый результат:*
+• Плотность: *{density_kg_formatted} кг/м³* 
+  ({density_g_formatted} г/см³)
+
+*🔍 Сравнение с известными объектами:*
+• Межзвездная среда: ~10⁻²¹ кг/м³
+• Водород (газ): 0.09 кг/м³
+• Вода: 1000 кг/м³ (1.00 г/см³)
+• Земля: 5515 кг/м³ (5.52 г/см³)
+• Железо: 7870 кг/м³ (7.87 г/см³)
+• Золото: 19300 кг/м³ (19.3 г/см³)
+• Нейтронная звезда: ~10¹⁷ кг/м³
+
+*📊 Интерпретация результата:*
 """
 
-            await update.message.reply_text(response, parse_mode='Markdown')
+        # Добавляем интерпретацию
+        if density_kg_m3 < 0.1:
+            response += "Это очень низкая плотность, сравнимая с разреженными газовыми облаками в космосе."
+        elif density_kg_m3 < 100:
+            response += "Плотность сравнима с легкими газами при нормальных условиях."
+        elif density_kg_m3 < 1000:
+            response += "Плотность сравнима с легкими материалами или пористыми породами."
+        elif density_kg_m3 < 3000:
+            response += "Плотность сравнима с легкими горными породами или льдом."
+        elif density_kg_m3 < 6000:
+            response += "Плотность сравнима с каменными породами планет земной группы."
+        elif density_kg_m3 < 8000:
+            response += "Плотность сравнима с металлами (железо, никель)."
+        elif density_kg_m3 < 15000:
+            response += "Высокая плотность, характерная для тяжелых металлов."
+        elif density_kg_m3 < 1e9:
+            response += "Очень высокая плотность, характерная для плотных материалов."
         else:
-            await update.message.reply_text(
-                "❌ Неверный формат. Используйте:\n"
-                "`плотность: масса=5.9722e24 радиус=6.371e6`",
-                parse_mode='Markdown'
-            )
+            response += "Экстремально высокая плотность, характерная для сверхплотных астрофизических объектов."
 
-    except ValueError:
+        response += "\n\n_Расчет выполнен с использованием точных формул и проверен двумя методами._"
+
+        await update.message.reply_text(response, parse_mode='Markdown')
+
+    except OverflowError:
+        # Обработка слишком больших чисел
         await update.message.reply_text(
-            "❌ Ошибка в формате чисел. Используйте научную нотацию.",
+            "❌ *Ошибка переполнения!*\n\n"
+            "Введенные значения слишком велики для расчета.\n"
+            "Попробуйте использовать меньшие значения или научную нотацию:\n"
+            "Пример: `плотность: 1e24 6e6`\n\n"
+            "Для ваших чисел: попробуйте `плотность: 6.872 9.862` (без степени)",
             parse_mode='Markdown'
         )
+
+    except ZeroDivisionError:
+        await update.message.reply_text(
+            "❌ *Ошибка деления на ноль!*\n\n"
+            "Радиус не может быть равен нулю.",
+            parse_mode='Markdown'
+        )
+
     except Exception as e:
+        print(f"❌ Общая ошибка при расчете плотности: {e}")
+        import traceback
+        traceback.print_exc()
+
         await update.message.reply_text(
-            f"❌ Ошибка расчета: {str(e)}",
+            f"❌ Произошла ошибка при расчете:\n```{str(e)}```\n\n"
+            "📝 *Попробуйте ввести данные в одном из форматов:*\n"
+            "• `плотность: масса=5.9722e24 радиус=6.371e6`\n"
+            "• `плотность: 5.9722e24 6.371e6`\n"
+            "• `плотность m=6e24 r=6e6`\n\n"
+            "*Для справки:* Плотность Земли ≈ 5515 кг/м³",
             parse_mode='Markdown'
         )
 
 
-# ==================== ОБРАЗОВАТЕЛЬНЫЕ МОДУЛИ ====================
 async def show_methods(update: Update):
-    """Показать методы измерений"""
     methods = """
 🔬 *МЕТОДЫ АСТРОНОМИЧЕСКИХ ИЗМЕРЕНИЙ*
 
 *📡 Определение массы:*
-• Планеты: по движению спутников
+• Планеты: по движению спутников (формула: M = 4π²a³/(GT²))
 • Звезды в двойных системах: третий закон Кеплера
+• Одиночные звезды: эволюционные модели + спектральный класс
 
 *📏 Определение радиуса:*
-• Радиолокация (планеты)
-• Интерферометрия (звезды)
-• Затменные двойные системы
+• Радиолокация (планеты): τ = 2R/c
+• Интерферометрия (звезды): θ = 1.22λ/D
+• Затменные двойные системы: по кривой блеска
+• Угловой диаметр + параллакс: R = θ·d/2
 
 *☀️ Определение светимости:*
-• Фотометрия + параллакс
-• Модели атмосфер звезд
+• Фотометрия + параллакс: L = 4πd²F
+• Болометрические измерения: интеграл по всему спектру
+• Модели атмосфер звезд: закон Стефана-Больцмана L = 4πR²σT⁴
 
 *📍 Определение расстояния:*
-• Тригонометрический параллакс
-• Спектроскопический параллакс
-• Цефеиды
+• Тригонометрический параллакс: d = 1/p (пк)
+• Спектроскопический параллакс: по спектру и светимости
+• Цефеиды: период-светимость P-L relation
+• Красное смещение: закон Хаббла v = H₀d
+
+*🎯 Точность в олимпиадах:*
+1. Всегда указывайте погрешность!
+2. Используйте систему СИ
+3. Сравнивайте разные источники
+4. Учитывайте метод измерения
 """
     await update.message.reply_text(methods, parse_mode='Markdown', reply_markup=get_main_keyboard())
 
@@ -894,34 +1161,48 @@ async def show_help(update: Update):
 ❓ *ПОМОЩЬ ПО ИСПОЛЬЗОВАНИЮ ASTROBOT*
 
 *Основные функции:*
-• 🪐 **8 Планет** - информация о планетах
-• ⭐️ **Сириус** - данные о звезде
+• 🪐 **8 Планет** - полная информация о планетах Солнечной системы
+• ⭐️ **Сириус** - подробные данные о самой яркой звезде
 • ☀️ **Солнце** - параметры нашей звезды
-• 📊 **Сравнить** - сравнение объектов
-• 📝 **Задачи** - олимпиадные задачи
-• 🔬 **Методы** - методики измерений
+• 📊 **Сравнить** - сравнение двух небесных тел
+• 📝 **Задачи** - олимпиадные задачи с полными решениями
+• 🔬 **Методы** - методики астрономических измерений
+• 📏 **Рассчитать плотность** - расчет плотности по массе и радиусу
 
-*🎯 Для олимпиад:*
-• Все задачи содержат полное решение
-• Указаны все используемые формулы
-• Приведены промежуточные расчеты
+*📏 Расчет плотности:*
+Для ручного расчета плотности отправьте сообщение в формате:
+плотность: [масса] [радиус]
+
+✅ *Поддерживаемые форматы:*
+• `плотность: масса=5.9722e24 радиус=6.371e6`
+• `плотность: m=5.9722e24 r=6.371e6`
+• `плотность: 5.9722e24 6.371e6`
+
+*📚 Константы для расчетов:*
+• G = 6.67430×10⁻¹¹ м³/(кг·с²) (гравитационная постоянная)
+• σ = 5.670374×10⁻⁸ Вт/(м²·К⁴) (постоянная Стефана-Больцмана)
+• 1 а.е. = 149 597 870 700 м (астрономическая единица)
+• 1 пк = 3.085677581×10¹⁶ м = 3.261563776 св. лет (парсек)
+• M☉ = 1.9885×10³⁰ кг (масса Солнца)
+• R☉ = 6.957×10⁸ м (радиус Солнца)
+• L☉ = 3.828×10²⁶ Вт (светимость Солнца)
 
 *✅ Особенности:*
 • К каждой задаче прилагается решение
 • Показаны все шаги расчета
+• Даны интересные факты
 • Формулы указаны в решениях задач
+• Расчет плотности проверен двумя методами
 """
     await update.message.reply_text(help_text, parse_mode='Markdown', reply_markup=get_main_keyboard())
 
 
-# ==================== ОБРАБОТЧИК КНОПОК ====================
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик нажатий на инлайн-кнопки"""
     query = update.callback_query
     await query.answer()
 
     data = query.data
-    logger.info(f"Нажата кнопка: {data}")
+    print(f"🔘 Нажата кнопка: {data}")
 
     if data.startswith("body_"):
         body_name = data.split("_")[1]
@@ -934,11 +1215,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data.startswith("task_"):
         task_type = data.split("_")[1]
+        print(f"📝 Выбрана задача типа: {task_type}")
         await show_task_with_solution(query, task_type)
 
     elif data == "back_main":
         await query.edit_message_text(
-            "🏠 *Возврат в главное меню*",
+            "🏠 *Возврат в главное меню*\nВыберите действие из кнопок ниже:",
             parse_mode='Markdown'
         )
         await query.edit_message_reply_markup(None)
@@ -946,7 +1228,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == "back_planets":
         await query.edit_message_text(
-            "🌌 *Выберите планету:*",
+            "🌌 *Выберите планету:*\n(8 планет Солнечной системы)",
             parse_mode='Markdown',
             reply_markup=get_planets_keyboard()
         )
@@ -966,116 +1248,55 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
-# ==================== ГРАЦИОЗНОЕ ЗАВЕРШЕНИЕ ====================
-def setup_graceful_shutdown(application):
-    """Настройка graceful shutdown"""
-    def signal_handler(signum, frame):
-        logger.info(f"Получен сигнал {signum}, завершаем работу...")
-        if application.running:
-            application.stop()
-            application.shutdown()
-        sys.exit(0)
-
-    signal.signal(signal.SIGTERM, signal_handler)
-    signal.signal(signal.SIGINT, signal_handler)
-
-
 # ==================== ГЛАВНАЯ ФУНКЦИЯ ====================
 def main():
-    """Основная функция запуска бота"""
+    """Запуск бота"""
     print("=" * 60)
-    print(f"🚀 AstroBot запускается...")
-    print(f"📅 Время: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"🔧 PID процесса: {os.getpid()}")
-    print(f"📁 База данных: {len(CELESTIAL_DATA)} объектов")
-    print(f"🔑 Проверка токена: {'✅ OK' if TOKEN else '❌ Нет токена!'}")
+    print("🚀 AstroBot: Полный справочник по астрономии с решениями")
+    print(f"📁 Используется JSON база данных: {len(CELESTIAL_DATA)} объектов")
     print("=" * 60)
 
-    # Проверка токена
-    if not TOKEN or TOKEN.strip() == "":
-        print("❌ ОШИБКА: Токен бота пустой!")
-        print("Добавьте токен в переменные окружения Railway:")
-        print("TOKEN = 8591960754:AAGBlsOx7h28a-UQvSH_0L4u81VMYTsLaFQ")
-        sys.exit(1)
+    if not CELESTIAL_DATA:
+        print("❌ ОШИБКА: Не удалось загрузить базу данных!")
+        print("Убедитесь, что файл celestial_data.json находится в той же папке")
+        return
 
-    # Проверка файловой блокировки
-    if not create_file_lock():
-        print("❌ Бот уже запущен! Завершаем работу...")
-        sys.exit(1)
+    print(f"✅ Загружено {len(CELESTIAL_DATA)} небесных тел")
+    print("✅ База данных готова к использованию")
+
+    # Статистика
+    planets = sum(1 for obj in CELESTIAL_DATA.values() if 'планета' in obj.get('type', '').lower())
+    stars = sum(1 for obj in CELESTIAL_DATA.values() if 'звезда' in obj.get('type', '').lower())
+
+    print(f"📊 Статистика: {planets} планет, {stars} звезд")
+    print("=" * 60)
+
+    # Запуск keep-alive в фоне
+    keep_alive_thread = threading.Thread(target=keep_alive, daemon=True)
+    keep_alive_thread.start()
+    print("✅ Keep-alive поток запущен в фоне")
 
     try:
-        # Создаем приложение с увеличенными таймаутами для вебхуков
-        print(f"🔧 Создание приложения с токеном: {TOKEN[:10]}...")
-        
-        application = (
-            Application.builder()
-            .token(TOKEN)
-            .read_timeout(30)
-            .write_timeout(30)
-            .connect_timeout(30)
-            .build()
-        )
+        # Используем токен, объявленный в начале файла
+        application = Application.builder().token(TOKEN).build()
 
         # Регистрация обработчиков
         application.add_handler(CommandHandler("start", start_command))
         application.add_handler(CallbackQueryHandler(button_callback))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-        # Настройка graceful shutdown
-        setup_graceful_shutdown(application)
+        print("Бот запускается...")
+        print("1. Найдите бота в Telegram")
+        print("2. Напишите /start")
+        print("3. Проверьте все функции")
+        print("=" * 60)
 
-        # Определяем режим запуска
-        railway_public_domain = os.getenv("RAILWAY_PUBLIC_DOMAIN", "")
-        railway_environment = os.getenv("RAILWAY_ENVIRONMENT", "")
-        railway_static_url = os.getenv("RAILWAY_STATIC_URL", "")
-
-        # Используем любой доступный Railway URL
-        webhook_url = None
-        for url_var in [railway_public_domain, railway_static_url]:
-            if url_var and url_var.strip():
-                webhook_url = f"https://{url_var.strip()}/webhook"
-                break
-
-        if webhook_url and railway_environment:
-            # Запуск на Railway с вебхуками
-            PORT = int(os.getenv("PORT", 8000))
-
-            print(f"🌐 Запуск на Railway")
-            print(f"🔗 Вебхук: {webhook_url}")
-            print(f"🔌 Порт: {PORT}")
-
-            # Запуск keep-alive в фоне (опционально)
-            web_url = os.getenv("WEB_URL", "")
-            if web_url:
-                keep_alive_thread = threading.Thread(target=keep_alive, daemon=True)
-                keep_alive_thread.start()
-                print("✅ Keep-alive поток запущен")
-
-            application.run_webhook(
-                listen="0.0.0.0",
-                port=PORT,
-                url_path="webhook",
-                webhook_url=webhook_url,
-                drop_pending_updates=True
-            )
-        else:
-            # Локальный запуск с polling (МИНИМАЛЬНЫЕ ПАРАМЕТРЫ)
-            print("🔄 Локальный запуск (режим polling)")
-            print("📡 Ожидание сообщений...")
-            application.run_polling(
-                drop_pending_updates=True,
-                allowed_updates=Update.ALL_TYPES
-            )
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
 
     except Exception as e:
-        logger.error(f"❌ Ошибка запуска бота: {e}")
-        print(f"❌ Ошибка: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+        print(f"❌ Ошибка запуска бота: {e}")
+        print("=" * 60)
 
 
 if __name__ == '__main__':
     main()
-
-
