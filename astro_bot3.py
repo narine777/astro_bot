@@ -616,11 +616,10 @@ g_Земля = 9.81 м/с²
         rho_jupiter = 1.33  # г/см³ - справочное значение
         rho_saturn = 0.69   # г/см³ - справочное значение
         
-        if density_jupiter and density_saturn:
-            response += f"📏 *Плотность:*\n"
-            response += f"• Юпитер: {density_jupiter['density_kg_m3']:.0f} кг/м³ ({density_jupiter['density_g_cm3']:.2f} г/см³)\n"
-            response += f"• Сатурн: {density_saturn['density_kg_m3']:.0f} кг/м³ ({density_saturn['density_g_cm3']:.2f} г/см³)\n"
-            response += f"• Отношение: {density_jupiter['density_kg_m3'] / density_saturn['density_kg_m3']:.2f}\n\n"
+if rho_jupiter:
+    response += f"• Юпитер: {density_jupiter['density_kg_m3']:.0f} кг/м³\n"
+if rho_saturn:
+    response += f"• Сатурн: {density_saturn['density_kg_m3']:.0f} кг/м³\n"
         else:
             # Если расчет не удался, используем справочные значения
             response += f"📏 *Плотность:*\n"
@@ -1348,3 +1347,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
