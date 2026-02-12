@@ -551,7 +551,7 @@ async def send_body_info(message, body_name: str, body: dict):
     await message.reply_text(response, parse_mode='Markdown', reply_markup=get_main_keyboard())
 
 
-# ==================== ИСПРАВЛЕННАЯ ФУНКЦИЯ СРАВНЕНИЯ ====================
+# ==================== ИСПРАВЛЕННАЯ ФУНКЦИЯ СРАВНЕНИЯ - УБРАНЫ СТРОКИ С ПЛОТНОСТЬЮ ====================
 async def show_comparison(query, body1: str, body2: str):
     if body1 not in CELESTIAL_DATA or body2 not in CELESTIAL_DATA:
         await query.edit_message_text("❌ Один из объектов не найден в базе данных.")
@@ -568,28 +568,7 @@ async def show_comparison(query, body1: str, body2: str):
 
     # ==================== ЗЕМЛЯ VS МАРС ====================
     if body1 == "Земля" and body2 == "Марс":
-        # Рассчитываем плотность Земли
-        density_earth = celestial_db.calculate_density("Земля")
-        # Рассчитываем плотность Марса
-        density_mars = celestial_db.calculate_density("Марс")
-        
-        response += f"📏 *Плотность:*\n"
-        
-        if density_earth:
-            response += f"• Земля: {density_earth['density_kg_m3']:.0f} кг/м³ ({density_earth['density_g_cm3']:.2f} г/см³)\n"
-        else:
-            response += f"• Земля: 5515 кг/м³ (5.52 г/см³)\n"
-        
-        if density_mars:
-            response += f"• Марс: {density_mars['density_kg_m3']:.0f} кг/м³ ({density_mars['density_g_cm3']:.2f} г/см³)\n"
-        else:
-            response += f"• Марс: 3933 кг/м³ (3.93 г/см³)\n"
-        
-        if density_earth and density_mars:
-            ratio = density_earth['density_kg_m3'] / density_mars['density_kg_m3']
-            response += f"• Отношение: {ratio:.2f}\n\n"
-        else:
-            response += f"• Отношение: 1.40\n\n"
+        # СТРОКИ С ПЛОТНОСТЬЮ ПОЛНОСТЬЮ УДАЛЕНЫ!
 
         response += """📝 **Сравнение силы тяжести:**
 g_Земля = 9.81 м/с²
@@ -603,28 +582,7 @@ g_Марс = 3.71 м/с²
 
     # ==================== ВЕНЕРА VS ЗЕМЛЯ ====================
     elif body1 == "Венера" and body2 == "Земля":
-        # Рассчитываем плотность Венеры
-        density_venus = celestial_db.calculate_density("Венера")
-        # Рассчитываем плотность Земли
-        density_earth = celestial_db.calculate_density("Земля")
-        
-        response += f"📏 *Плотность:*\n"
-        
-        if density_venus:
-            response += f"• Венера: {density_venus['density_kg_m3']:.0f} кг/м³ ({density_venus['density_g_cm3']:.2f} г/см³)\n"
-        else:
-            response += f"• Венера: 5243 кг/м³ (5.24 г/см³)\n"
-        
-        if density_earth:
-            response += f"• Земля: {density_earth['density_kg_m3']:.0f} кг/м³ ({density_earth['density_g_cm3']:.2f} г/см³)\n"
-        else:
-            response += f"• Земля: 5515 кг/м³ (5.52 г/см³)\n"
-        
-        if density_venus and density_earth:
-            ratio = density_venus['density_kg_m3'] / density_earth['density_kg_m3']
-            response += f"• Отношение: {ratio:.2f}\n\n"
-        else:
-            response += f"• Отношение: 0.95\n\n"
+        # СТРОКИ С ПЛОТНОСТЬЮ ПОЛНОСТЬЮ УДАЛЕНЫ!
 
         response += """📝 **Сравнение силы тяжести:**
 g_Венера = 8.87 м/с²
@@ -638,28 +596,7 @@ g_Земля = 9.81 м/с²
 
     # ==================== ЮПИТЕР VS САТУРН ====================
     elif body1 == "Юпитер" and body2 == "Сатурн":
-        # Рассчитываем плотность Юпитера
-        density_jupiter = celestial_db.calculate_density("Юпитер")
-        # Рассчитываем плотность Сатурна
-        density_saturn = celestial_db.calculate_density("Сатурн")
-        
-        response += f"📏 *Плотность:*\n"
-        
-        if density_jupiter:
-            response += f"• Юпитер: {density_jupiter['density_kg_m3']:.0f} кг/м³ ({density_jupiter['density_g_cm3']:.2f} г/см³)\n"
-        else:
-            response += f"• Юпитер: 1326 кг/м³ (1.33 г/см³)\n"
-        
-        if density_saturn:
-            response += f"• Сатурн: {density_saturn['density_kg_m3']:.0f} кг/м³ ({density_saturn['density_g_cm3']:.2f} г/см³)\n"
-        else:
-            response += f"• Сатурн: 687 кг/м³ (0.69 г/см³)\n"
-        
-        if density_jupiter and density_saturn:
-            ratio = density_jupiter['density_kg_m3'] / density_saturn['density_kg_m3']
-            response += f"• Отношение: {ratio:.2f}\n\n"
-        else:
-            response += f"• Отношение: 1.93\n\n"
+        # СТРОКИ С ПЛОТНОСТЬЮ ПОЛНОСТЬЮ УДАЛЕНЫ!
 
         response += """📝 **Сравнение плотности:**
 ρ_Юпитер = 1.33 г/см³
@@ -1143,9 +1080,9 @@ V = *{volume_formatted} м³*
         elif density_kg_m3 < 100:
             response += "Плотность сравнима с легкими газами при нормальных условиях."
         elif density_kg_m3 < 1000:
-            response += f"Плотность сравнима с плотностью Сатурна ({density_kg_m3:.0f} кг/м³ ≈ {density_kg_m3/10:.1f}% от плотности воды)."
+            response += f"Плотность сравнима с плотностью Сатурна ({density_kg_m3:.0f} кг/м³ ≈ {density_kg_m3 / 10:.1f}% от плотности воды)."
         elif density_kg_m3 < 3000:
-            response += f"Плотность сравнима с плотностью Юпитера ({density_kg_m3:.0f} кг/м³ ≈ {density_kg_m3/10:.1f}% от плотности воды)."
+            response += f"Плотность сравнима с плотностью Юпитера ({density_kg_m3:.0f} кг/м³ ≈ {density_kg_m3 / 10:.1f}% от плотности воды)."
         elif density_kg_m3 < 6000:
             response += "Плотность сравнима с каменными породами планет земной группы."
         elif density_kg_m3 < 8000:
